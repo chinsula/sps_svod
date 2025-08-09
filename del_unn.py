@@ -1,134 +1,123 @@
 import sys
+import pandas as pd
+from datetime import datetime
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton,
     QFileDialog, QLabel, QMessageBox
 )
-import pandas as pd
-from datetime import datetime
 
-class ExcelProcessor(QWidget):
+class FilterRowsWithSetElements(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Обработка Excel файлов")
-        self.layout = QVBoxLayout()
+        self.setWindowTitle("Фильтр: строки с элементами множества")
+        self.setup_ui()
 
-        self.btn_select_input_file = QPushButton("Выбрать исходный файл для обработки")
-        self.lbl_input_file = QLabel("Файл для обработки не выбран")
-        self.btn_select_data_file = QPushButton("Выбрать файл с данными для сравнения")
-        self.lbl_data_file = QLabel("Файл с данными не выбран")
-        self.btn_select_save_dir = QPushButton("Выбрать папку для сохранения результата")
-        self.lbl_save_dir = QLabel("Папка для сохранения не выбрана")
-        self.btn_start = QPushButton("Обработать и сохранить")
-        self.btn_start.setEnabled(False)
-
-        self.layout.addWidget(self.btn_select_input_file)
-        self.layout.addWidget(self.lbl_input_file)
-        self.layout.addWidget(self.btn_select_data_file)
-        self.layout.addWidget(self.lbl_data_file)
-        self.layout.addWidget(self.btn_select_save_dir)
-        self.layout.addWidget(self.lbl_save_dir)
-        self.layout.addWidget(self.btn_start)
-        self.setLayout(self.layout)
-
-        self.file_path_input = None
-        self.file_path_data = None
+    def setup_ui(self):
+        self.first_file_path = None
+        self.second_file_path = None
         self.save_dir = None
 
-        self.btn_select_input_file.clicked.connect(self.select_input_file)
-        self.btn_select_data_file.clicked.connect(self.select_data_file)
-        self.btn_select_save_dir.clicked.connect(self.select_save_directory)
+        layout = QVBoxLayout()
+
+        self.btn_first = QPushButton("Выбрать первый файл")
+        self.lbl_first = QLabel("Первый файл не выбран")
+        self.btn_second = QPushButton("Выбрать второй файл")
+        self.lbl_second = QLabel("Второй файл не выбран")
+        self.btn_save = QPushButton("Выбрать папку для сохранения")
+        self.lbl_save = QLabel("Папка не выбрана")
+        self.btn_start = QPushButton("Запустить")
+        self.btn_start.setEnabled(False)
+
+        layout.addWidget(self.btn_first)
+        layout.addWidget(self.lbl_first)
+        layout.addWidget(self.btn_second)
+        layout.addWidget(self.lbl_second)
+        layout.addWidget(self.btn_save)
+        layout.addWidget(self.lbl_save)
+        layout.addWidget(self.btn_start)
+
+        self.setLayout(layout)
+
+        self.btn_first.clicked.connect(self.select_first_file)
+        self.btn_second.clicked.connect(self.select_second_file)
+        self.btn_save.clicked.connect(self.select_save_directory)
         self.btn_start.clicked.connect(self.process_files)
 
-        # Строка поиска
-        self.search_str = "0747 УО"
-
-    def select_input_file(self):
-        file, _ = QFileDialog.getOpenFileName(self, "Выберите файл для обработки", "", "Excel Files (*.xlsx *.xls)")
-        if file:
-            self.file_path_input = file
-            self.lbl_input_file.setText(f"Файл для обработки: {file}")
+    def select_first_file(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Выберите первый файл")
+        if path:
+            self.first_file_path = path
+            self.lbl_first.setText(f"Первый файл: {path}")
             self.check_ready()
 
-    def select_data_file(self):
-        file, _ = QFileDialog.getOpenFileName(self, "Выберите файл с данными для сравнения", "", "Excel Files (*.xlsx *.xls)")
-        if file:
-            self.file_path_data = file
-            self.lbl_data_file.setText(f"Файл с данными: {file}")
+    def select_second_file(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Выберите второй файл")
+        if path:
+            self.second_file_path = path
+            self.lbl_second.setText(f"Второй файл: {path}")
             self.check_ready()
 
     def select_save_directory(self):
-        dir_path = QFileDialog.getExistingDirectory(self, "Выберите папку для сохранения результата")
-        if dir_path:
-            self.save_dir = dir_path
-            self.lbl_save_dir.setText(f"Папка для сохранения: {dir_path}")
+        directory = QFileDialog.getExistingDirectory(self, "Выберите папку для сохранения")
+        if directory:
+            self.save_dir = directory
+            self.lbl_save.setText(f"Папка: {directory}")
             self.check_ready()
 
     def check_ready(self):
-        if self.file_path_input and self.file_path_data and self.save_dir:
+        if self.first_file_path and self.second_file_path and self.save_dir:
             self.btn_start.setEnabled(True)
 
     def process_files(self):
         try:
-            # Загружаем входной файл и преобразуем все ячейки в строки
-            df_input = pd.read_excel(self.file_path_input, header=None)
-            df_input = df_input.astype(object)
+            # Загружаем файлы
+            df_first = pd.read_excel(self.first_file_path, header=None)
+            df_second = pd.read_excel(self.second_file_path, header=None)
 
-            # Загружаем файл с данными и тоже преобразуем все ячейки
-            df_data = pd.read_excel(self.file_path_data, header=None)
-            df_data = df_data.astype(object)
-
-            # Получаем третью ячейку файла с данными
-            if df_data.shape[1] < 3:
-                QMessageBox.warning(self, "Ошибка", "Файл с данными должен содержать как минимум 3 столбца.")
-                return
-            third_cell_data = df_data.iat[0, 2]
-
-            def clean_text(text):
+            # Создаем множество строк из 3-го столбца второго файла
+            set_of_strings = set()
+            for text in df_second.iloc[:, 2]:  # 3-й столбец
                 if pd.isna(text):
-                    return ''
-                return ' '.join(str(text).split()).lower()
+                    continue
+                cleaned = ''.join(str(text).split()).upper()
+                set_of_strings.add(cleaned)
 
-            target_text = clean_text(third_cell_data)
-            print(f"Ищу: '{target_text}'")  # для отладки
+            print(f"Множество из 3-й колонки второго файла: {set_of_strings}")
 
+            # Проверяем каждую строку первого файла
             result_rows = []
-            count_matches = 0
 
-            # Проходим по каждой ячейке входного файла
-            for index, row in df_input.iterrows():
-                for cell in row:
-                    cell_text = clean_text(cell)
-                    # для отладки выводим сравниваемые строки
-                    print(f"Ячейка: '{cell_text}'")
-                    if target_text == cell_text:
-                        print("Совпадение найдено!")
+            for index, row in df_first.iterrows():
+                row_str = ''
+                # Проверяем 1-й и 3-й столбцы
+                for col_idx in [0, 2]:
+                    cell_value = str(row[col_idx])
+                    cleaned_cell = ''.join(cell_value).replace(' ', '').upper()
+                    print(f"Строка {index} в колонке {col_idx}: '{cell_value}' -> '{cleaned_cell}'")
+                    # Проверяем наличие любого элемента множества в этой строке
+                    if any(element in cleaned_cell for element in set_of_strings):
+                        print(f"В строке {index} найден элемент множества")
                         result_rows.append(row.tolist())
-                        count_matches += 1
-                        break
-                if count_matches >= 6:
-                    break
+                        break  # как только нашли совпадение, переходим к следующей строке
 
-            # Генерируем имя файла с датой и временем
-            now = datetime.now()
-            timestamp = now.strftime("%Y%m%d_%H%M%S")
-            filename = f"Результат_{timestamp}.xlsx"
-            save_path = f"{self.save_dir}/{filename}"
+            # Удаляем дубликаты
+            result_rows = [list(x) for x in {tuple(row) for row in result_rows}]
 
             # Сохраняем результат
             if result_rows:
-                result_df = pd.DataFrame(result_rows)
-                result_df.to_excel(save_path, index=False, header=False)
-                QMessageBox.information(self, "Готово", f"Обработка завершена и сохранена: {save_path}")
+                df_result = pd.DataFrame(result_rows)
+                filename = f"Результат_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+                save_path = f"{self.save_dir}/{filename}"
+                df_result.to_excel(save_path, index=False, header=False)
+                QMessageBox.information(self, "Готово", f"Результат сохранен: {save_path}")
             else:
                 QMessageBox.information(self, "Результат", "Совпадений не найдено.")
 
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", str(e))
 
-
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = ExcelProcessor()
+    app = QApplication([])
+    window = FilterRowsWithSetElements()
     window.show()
     sys.exit(app.exec())
-#
