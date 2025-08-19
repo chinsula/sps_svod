@@ -71,30 +71,23 @@ class FileProcessor(QWidget):
 
     def process_files(self):
         try:
-            # Загрузка файлов
-            df_first = pd.read_excel(self.first_file_path, header=None)
-            df_second = pd.read_excel(self.second_file_path, header=None)
+            # Чтение файлов
+            df_first = pd.read_excel(self.first_file_path, header=None, engine='openpyxl')
+            df_second = pd.read_excel(self.second_file_path, header=None, engine='openpyxl')
 
-            # Выводим все значения из второго файла, начиная с третьей строки
-            print("Все исходные значения из второго файла:")
-            for idx, text in enumerate(df_second.iloc[2:, 1]):
-                print(f"Строка {idx + 2} (начиная с 0): {text}")
-
-            # Собираем множество из второго файла, начиная с 3-й строки (индекс 2)
+            # Формируем множество из первого столбца второго файла, начиная с первой строки
             set_of_strings = set()
-            for text in df_second.iloc[2:, 1]:
+            for text in df_second.iloc[:, 0]:
                 if pd.isna(text):
                     continue
-                cleaned = ''.join(str(text).split()).upper()
-                set_of_strings.add(cleaned)
+                s = str(text)
+                # Удаляем последние два символа, если длина больше 2
+                if len(s) > 2:
+                    s = s[:-2]
+                s_clean = ''.join(s).replace(' ', '').upper()
+                set_of_strings.add(s_clean)
 
-            # Выводим сформированное множество
-            print("Множество из второго файла (после сбора):")
-            for item in set_of_strings:
-                print(f"'{item}'")
-            print("\n")  # разделитель
-
-            # Проверяем строки из первого файла
+            # Фильтруем строки первого файла — только те, где есть хотя бы один элемент множества
             результаты = []
 
             for idx, row in df_first.iterrows():
@@ -108,30 +101,18 @@ class FileProcessor(QWidget):
             # Удаляем дубликаты
             результаты = [list(x) for x in {tuple(row) for row in результаты}]
 
-            # Сохраняем результат
+            # Сохраняем
             if результаты:
                 df_result = pd.DataFrame(результаты)
                 filename = f"Результат_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
                 save_path = f"{self.save_dir}/{filename}"
                 df_result.to_excel(save_path, index=False, header=False)
 
-                # Вывод в консоль
-                print("Множество из второго файла (после сбора):")
-                for item in set_of_strings:
-                    print(f"'{item}'")
-                print("\nСодержимое второго файла (индексы строк и столбцы):")
-                for row_idx, row in df_second.iterrows():
-                    row_str = " | ".join([f"{col_idx}:{row[col_idx]}" for col_idx in range(len(row))])
-                    print(f"Строка {row_idx}: {row_str}")
-
                 QMessageBox.information(self, "Готово", f"Результат сохранен: {save_path}")
             else:
-                print("Нет совпадений.")
                 QMessageBox.information(self, "Результат", "Совпадений не найдено.")
-
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", str(e))
-
 
 if __name__ == "__main__":
     app = QApplication([])
