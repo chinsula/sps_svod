@@ -1,60 +1,41 @@
 import sys
-import os
 from datetime import datetime
 from PySide6.QtWidgets import (
     QApplication, QWidget, QPushButton, QFileDialog,
-    QVBoxLayout, QLabel, QLineEdit, QMessageBox
+    QVBoxLayout, QLabel, QMessageBox
 )
 import pandas as pd
 
 class ExcelComparer(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Сопоставление Excel файлов")
-        self.resize(600, 400)
+        self.setWindowTitle("Сравнение и вывод совпадающих строк по всему столбцу")
+        self.resize(600, 200)
 
         self.layout = QVBoxLayout()
 
-        # Кнопки и метки для выбора первого файла
         self.btn_select_file1 = QPushButton("Выбрать первый файл Excel")
         self.label_file1_path = QLabel("Первый файл не выбран")
-        # Кнопки и метки для выбора второго файла
         self.btn_select_file2 = QPushButton("Выбрать второй файл Excel")
         self.label_file2_path = QLabel("Второй файл не выбран")
-        # Кнопка и метка для выбора места сохранения
         self.btn_save_location = QPushButton("Выбрать место сохранения")
         self.label_save_path = QLabel("Место сохранения не выбрано")
+        self.btn_run = QPushButton("Сравнить и сохранить")
 
-        # Поля для ввода номеров столбцов
-        self.label_col1 = QLabel("Номер столбца в первом файле (начинается с 0):")
-        self.input_col1 = QLineEdit()
-        self.label_col2 = QLabel("Номер столбца во втором файле (начинается с 0):")
-        self.input_col2 = QLineEdit()
-
-        # Кнопка для запуска сравнения
-        self.btn_run = QPushButton("Запустить сравнение и сохранить результат")
-
-        # Добавляем виджеты
         self.layout.addWidget(self.btn_select_file1)
         self.layout.addWidget(self.label_file1_path)
         self.layout.addWidget(self.btn_select_file2)
         self.layout.addWidget(self.label_file2_path)
         self.layout.addWidget(self.btn_save_location)
         self.layout.addWidget(self.label_save_path)
-        self.layout.addWidget(self.label_col1)
-        self.layout.addWidget(self.input_col1)
-        self.layout.addWidget(self.label_col2)
-        self.layout.addWidget(self.input_col2)
         self.layout.addWidget(self.btn_run)
 
         self.setLayout(self.layout)
 
-        # Переменные для путей
         self.file_path1 = None
         self.file_path2 = None
         self.save_path = None
 
-        # Связываем кнопки
         self.btn_select_file1.clicked.connect(self.select_file1)
         self.btn_select_file2.clicked.connect(self.select_file2)
         self.btn_save_location.clicked.connect(self.select_save_location)
@@ -73,9 +54,8 @@ class ExcelComparer(QWidget):
             self.label_file2_path.setText(f"Второй файл: {path}")
 
     def select_save_location(self):
-        # Автоматически создаем имя файла с датой и временем
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        default_name = f"сравнение_{timestamp}.xlsx"
+        default_name = f"совпадения_{timestamp}.xlsx"
         path, _ = QFileDialog.getSaveFileName(self, "Выберите место сохранения", default_name, "Excel Files (*.xlsx)")
         if path:
             self.save_path = path
@@ -85,56 +65,44 @@ class ExcelComparer(QWidget):
         if not all([self.file_path1, self.file_path2, self.save_path]):
             QMessageBox.warning(self, "Ошибка", "Пожалуйста, выберите оба файла и место сохранения.")
             return
-
         try:
             df1 = pd.read_excel(self.file_path1)
             df2 = pd.read_excel(self.file_path2)
 
-            # Получение номеров столбцов из ввода
-            col_idx1 = int(self.input_col1.text())
-            col_idx2 = int(self.input_col2.text())
-
-            # Проверка наличия указанных столбцов
-            if col_idx1 >= len(df1.columns) or col_idx2 >= len(df2.columns):
-                QMessageBox.warning(self, "Ошибка", "Номер столбца превышает количество столбцов в файле.")
+            # Проверка наличия хотя бы двух столбцов
+            if len(df1.columns) < 2 or len(df2.columns) < 2:
+                QMessageBox.warning(self, "Ошибка", "Один из файлов не содержит хотя бы двух столбцов.")
                 return
 
-            # Проверка, что выбранные столбцы не нулевые или пустые
-            col_name1 = df1.columns[col_idx1]
-            col_name2 = df2.columns[col_idx2]
-            if str(col_name1).strip() in ('', '0') or str(col_name2).strip() in ('', '0'):
-                QMessageBox.warning(self, "Ошибка", "Выбран нулевой или пустой столбец.")
-                return
+            col1 = df1.iloc[:, 0]
+            col2 = df2.iloc[:, 0]
 
-            # Извлекаем нужные столбцы
-            col_series1 = df1.iloc[:, col_idx1]
-            col_series2 = df2.iloc[:, col_idx2]
-
-            # Приведение данных к единому виду
+            # Стандартизация (убираем пробелы, делаем нижний регистр)
             def standardize(series):
-                return series.astype(str).str.strip().str.lower()
+                return series.astype(str).str.replace(r'\s+', '', regex=True).str.lower()
 
-            s1 = standardize(col_series1)
-            s2 = standardize(col_series2)
+            s1 = standardize(col1)
+            s2 = standardize(col2)
 
-            # Создаем результирующий DataFrame
-            result_df = pd.DataFrame()
+            # Поиск совпадений по всему столбцу
+            # Создаем множества уникальных значений для быстрого поиска
+            set_s1 = set(s1)
+            set_s2 = set(s2)
 
-            # Вставляем первые столбцы каждого файла
-            result_df['Первый файл'] = df1.iloc[:, 0]
-            result_df['Второй файл'] = df2.iloc[:, 0]
+            # Общие совпадения
+            common_values = set_s1.intersection(set_s2)
 
-            # Вставляем выбранные столбцы
-            result_df['Выбранный столбец 1'] = col_series1
-            result_df['Выбранный столбец 2'] = col_series2
+            # Индексы строк, где значения совпадают
+            indices_s1 = s1[s1.isin(common_values)].index
+            indices_s2 = s2[s2.isin(common_values)].index
 
-            # Добавляем столбец с результатом сравнения
-            result_df['Совпадает'] = s1.isin(s2)
+            # Создаем DataFrame с соответствующими вторыми столбцами
+            result_df = pd.DataFrame({
+                'Второй столбец файла 1': col1.iloc[indices_s1].reset_index(drop=True),
+                'Второй столбец файла 2': col2.iloc[indices_s2].reset_index(drop=True)
+            })
 
-            # Места для вставки дополнительных столбцов, например:
-            # result_df['Дополнительный столбец'] = df1.iloc[:, номер]
-
-            # Сохраняем с автоматическим именем
+            # Сохраняем результат
             result_df.to_excel(self.save_path, index=False)
 
             QMessageBox.information(self, "Успех", "Файл успешно сохранен.")

@@ -20,9 +20,9 @@ class FileProcessor(QWidget):
 
         layout = QVBoxLayout()
 
-        self.btn_first = QPushButton("Выбрать первый файл")
+        self.btn_first = QPushButton("Выбрать файл для обработки")
         self.lbl_first = QLabel("Первый файл не выбран")
-        self.btn_second = QPushButton("Выбрать второй файл")
+        self.btn_second = QPushButton("Выбрать файл-базу данных")
         self.lbl_second = QLabel("Второй файл не выбран")
         self.btn_save = QPushButton("Выбрать папку для сохранения")
         self.lbl_save = QLabel("Папка не выбрана")
