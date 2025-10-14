@@ -151,3 +151,4 @@ if __name__ == "__main__":
     window = FileProcessor()
     window.show()
     sys.exit(app.exec())
+    ##
