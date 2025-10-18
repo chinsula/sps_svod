@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<title>Обработка Excel файла</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+<h2>Обработка Excel файла</h2>
+<div>
+  <label>Выберите входной файл Excel:</label>
+  <input type="file" id="inputFile" accept=".xlsx, .xls" />
+</div>
+<div>
+  <button id="processBtn">Обработать файл</button>
+</div>
+
+<script>
+document.getElementById('processBtn').addEventListener('click', () => {
+  const input = document.getElementById('inputFile');
+  if (!input.files.length) {
+    alert('Пожалуйста, выберите файл');
+    return;
+  }
+  const file = input.files[0];
+  const reader = new FileReader();
+  reader.onload = () => {
+    const data = new Uint8Array(reader.result);
+    const workbook = XLSX.read(data, { type: 'array' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header:1, defval: '' });
+
+    let resultRows = [];
+    let prevRow = null;
+    let fixedBValue = null; // Значение B из первой строки блока
+
+    const normalizeRow = (row, length=11) => {
+      if (row.length < length) {
+        row = row.concat(Array(length - row.length).fill(''));
+      }
+      return row;
+    }
+
+    for (let i=0; i<jsonData.length; i++) {
+      let row = normalizeRow(jsonData[i], 11);
+      const secondCell = row[1];
+
+      if (prevRow !== null) {
+        const prevSecondCell = prevRow[1];
+
+        if (secondCell === prevSecondCell) {
+          const prevElevenCell = prevRow[10];
+
+          if (prevElevenCell === '' || prevElevenCell === undefined || prevElevenCell === null) {
+            // В первую строку блока фиксируем значение B
+            if (fixedBValue === null) {
+              fixedBValue = prevRow[1];
+            }
+            // Суммировать только ячейки с 3 по 8 (столбцы 2-7)
+            let newValues = [];
+            for (let j=2; j<=7; j++) {
+              let prevVal = parseFloat(prevRow[j]) || 0;
+              let currVal = parseFloat(row[j]) || 0;
+              let sum = prevVal + currVal;
+              if (Number.isInteger(prevVal) && Number.isInteger(currVal)) {
+                sum = Math.round(sum);
+              }
+              newValues.push(sum);
+            }
+            // Обновляем только ячейки с 3 по 8
+            for (let j=2; j<=7; j++) {
+              prevRow[j] = newValues[j-2];
+            }
+            // Остальные ячейки оставляем без изменений
+            // Обновляем остальные столбцы (например, 10 и 11)
+            prevRow[9] = row[9];
+            prevRow[10] = row[10];
+
+            if (row[10] === '' || row[10] === undefined) {
+              prevRow = normalizeRow(row, 11);
+              fixedBValue = null;
+            }
+            continue;
+          }
+        }
+      }
+      // Если строки не объединяются, добавляем предыдущую в результат
+      if (prevRow !== null) {
+        resultRows.push(prevRow);
+      }
+      // Сохраняем текущую строку как новую, фиксируем значение B
+      prevRow = normalizeRow(row, 11);
+      // В этом случае значение B остается из исходных данных и не меняется
+    }
+
+    if (prevRow !== null) {
+      resultRows.push(prevRow);
+    }
+
+    // Создаем и скачиваем файл
+    const newWorkbook = XLSX.utils.book_new();
+    const newSheet = XLSX.utils.aoa_to_sheet(resultRows);
+    XLSX.utils.book_append_sheet(newWorkbook, newSheet, 'Обработка');
+
+    const wbout = XLSX.write(newWorkbook, {bookType:'xlsx', type:'array'});
+    const blob = new Blob([wbout], {type:'application/octet-stream'});
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    const timestamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'_');
+    a.download = `processed_${timestamp}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+  reader.readAsArrayBuffer(file);
+});
+</script>
+</body>
+</html>
