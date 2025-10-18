@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<title>Объединённое приложение обработки Excel файлов</title>
+<!-- Подключение библиотеки XLSX -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<style>
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f4f6f8;
+    margin: 0;
+    padding: 40px;
+  }
+  h2 {
+    text-align: center;
+    color: #2c3e50;
+    margin-bottom: 30px;
+  }
+  .container {
+    max-width: 700px;
+    margin: 0 auto;
+    background-color: #ffffff;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+  .file-input-group {
+    margin-bottom: 25px;
+  }
+  label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #34495e;
+  }
+  input[type="file"] {
+    display: inline-block;
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    width: 100%;
+    cursor: pointer;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  input[type="file"]:hover {
+    border-color: #3498db;
+    box-shadow: 0 0 8px rgba(52, 152, 219, 0.2);
+  }
+  button {
+    display: block;
+    width: 100%;
+    padding: 15px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+    background-color: #2980b9;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.2s;
+  }
+  button:disabled {
+    background-color: #bdc3c7;
+    cursor: not-allowed;
+  }
+  button:hover:not(:disabled) {
+    background-color: #3498db;
+    transform: scale(1.02);
+  }
+  /* Анимация для более плавного появления */
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(52, 152, 219, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(52, 152, 219, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(52, 152, 219, 0); }
+  }
+</style>
+</head>
+<body>
+
+<h2>Объединённое приложение обработки Excel файлов</h2>
+
+<div class="container">
+  <div class="file-input-group">
+    <label for="fileSum">Выберите файл для суммирования (объединение по признаку колонок K-L):</label>
+    <input type="file" id="fileSum" accept=".xlsx, .xls" />
+  </div>
+  <div class="file-input-group">
+    <label for="fileSet">Выберите файл для формирования множества:</label>
+    <input type="file" id="fileSet" accept=".xlsx, .xls" />
+  </div>
+  <div>
+    <button id="processBtn" disabled>Запустить обработку</button>
+  </div>
+</div>
+
+<script>
+const fileInputSum = document.getElementById('fileSum');
+const fileInputSet = document.getElementById('fileSet');
+const processBtn = document.getElementById('processBtn');
+
+let sumFileContent = null;
+let setFileContent = null;
+
+// Чтение файла для суммирования
+fileInputSum.addEventListener('change', () => {
+    if (fileInputSum.files.length > 0) {
+        readExcelFile(fileInputSum.files[0], (data) => {
+            sumFileContent = data;
+            checkReady();
+        });
+    }
+});
+
+// Чтение файла для множества
+fileInputSet.addEventListener('change', () => {
+    if (fileInputSet.files.length > 0) {
+        readExcelFile(fileInputSet.files[0], (data) => {
+            setFileContent = data;
+            checkReady();
+        });
+    }
+});
+
+// Проверка готовности к запуску
+function checkReady() {
+    if (sumFileContent && setFileContent) {
+        processBtn.disabled = false;
+        processBtn.style.backgroundColor = '#27ae60'; // Зеленый цвет для активной кнопки
+        processBtn.innerText = 'Обработать файлы';
+    }
+}
+
+// Функция чтения файла
+function readExcelFile(file, callback) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, {type: 'array'});
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(worksheet, {header:1});
+        callback(json);
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+// Основная функция обработки
+function processFiles() {
+    const df_first = sumFileContent;
+    const df_second = setFileContent;
+
+    // 1. Объединение строк
+    let resultRows = [];
+    let prevRow = null;
+    let fixedBValue = null; // Значение B из первой строки блока
+
+    const normalizeRow = (row, length=11) => {
+      if (row.length < length) {
+        row = row.concat(Array(length - row.length).fill(''));
+      }
+      return row;
+    }
+
+    for (let i=0; i<df_first.length; i++) {
+      let row = normalizeRow(df_first[i], 11);
+      const secondCell = row[1];
+
+      if (prevRow !== null) {
+        const prevSecondCell = prevRow[1];
+
+        if (secondCell === prevSecondCell) {
+          const prevElevenCell = prevRow[10];
+
+          if (prevElevenCell === '' || prevElevenCell === undefined || prevElevenCell === null) {
+            if (fixedBValue === null) {
+              fixedBValue = prevRow[1];
+            }
+            // Суммируем ячейки с 3 по 8 (2-7)
+            let newValues = [];
+            for (let j=2; j<=7; j++) {
+              let prevVal = parseFloat(prevRow[j]) || 0;
+              let currVal = parseFloat(row[j]) || 0;
+              let sum = prevVal + currVal;
+              if (Number.isInteger(prevVal) && Number.isInteger(currVal)) {
+                sum = Math.round(sum);
+              }
+              newValues.push(sum);
+            }
+            // Обновляем только ячейки с 3 по 8
+            for (let j=2; j<=7; j++) {
+              prevRow[j] = newValues[j-2];
+            }
+            // Обновляем остальные столбцы (например, 10 и 11)
+            prevRow[9] = row[9];
+            prevRow[10] = row[10];
+
+            if (row[10] === '' || row[10] === undefined) {
+              prevRow = normalizeRow(row, 11);
+              fixedBValue = null;
+            }
+            continue;
+          }
+        }
+      }
+      // Если строки не объединяются, добавляем предыдущую в результат
+      if (prevRow !== null) {
+        resultRows.push(prevRow);
+      }
+      // Сохраняем текущую строку как новую
+      prevRow = normalizeRow(row, 11);
+      // Значение B фиксируется из исходных данных и не меняется
+    }
+
+    if (prevRow !== null) {
+      resultRows.push(prevRow);
+    }
+
+    // 2. Формируем множество из второго файла
+    const set_of_strings = new Set();
+    for (let row of df_second) {
+        if (row.length > 0 && row[0] != null) {
+            let s = String(row[0]);
+            if (s.length > 2) {
+                s = s.slice(0, -2);
+            }
+            s = s.replace(/\s+/g, '').toUpperCase();
+            set_of_strings.add(s);
+        }
+    }
+
+    // 3. Фильтрация строк по множеству
+    const filteredResults = [];
+    for (let row of resultRows) {
+        let matchFound = false;
+        for (let colIdx = 1; colIdx < row.length; colIdx++) {
+            if (row[colIdx] != null) {
+                let cell = String(row[colIdx]);
+                let cell_cleaned = cell.replace(/\s+/g, '').toUpperCase();
+                for (let elem of set_of_strings) {
+                    if (cell_cleaned.includes(elem)) {
+                        filteredResults.push(row);
+                        matchFound = true;
+                        break;
+                    }
+                }
+                if (matchFound) break;
+            }
+        }
+    }
+
+    // Удаляем дубликаты
+    const uniqueResults = Array.from(new Set(filteredResults.map(r => JSON.stringify(r)))).map(s => JSON.parse(s));
+
+    // Создаем файл для скачивания
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(uniqueResults);
+    XLSX.utils.book_append_sheet(wb, ws, "Результат");
+
+    const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+    const blob = new Blob([wbout], {type: 'application/octet-stream'});
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const filename = `Результат_${new Date().toISOString().replace(/[:.]/g, '-')}.xlsx`;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// Обработчик кнопки
+document.getElementById('processBtn').addEventListener('click', () => {
+    if (sumFileContent && setFileContent) {
+        processFiles();
+    }
+});
+</script>
+</body>
+</html>
